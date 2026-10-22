@@ -1,0 +1,138 @@
+/*
+ * Thème repris de Sekur : base neutre bleu-gris (#627078), vert d'action unique (#21BA45), Roboto
+ * dense (13 px), fond clair #e7eaeb, mode sombre sur #1D1D1D. quasar.config.js pose les couleurs
+ * de marque ; ce fichier ne porte que les jetons propres à la démo.
+ */
+:root {
+  --demo-bg: #e7eaeb;
+  --demo-surface: #ffffff;
+  --demo-border: #d3d8da;
+  --demo-text: #627078;
+  --demo-text-strong: #3f4a50;
+  --demo-code-bg: #f3f5f6;
+  --demo-header: #1d1d1d;
+  --demo-drawer: #ffffff;
+}
+
+body.body--dark {
+  --demo-bg: #121212;
+  --demo-surface: #1d1d1d;
+  --demo-border: #333b3f;
+  --demo-text: #b7c0c5;
+  --demo-text-strong: #eef1f2;
+  --demo-code-bg: #262b2e;
+  --demo-header: #000000;
+  --demo-drawer: #1d1d1d;
+}
+
+body {
+  font-size: 13px;
+  background: var(--demo-bg);
+  color: var(--demo-text);
+}
+
+/* Densité Sekur : boutons, champs et icônes plus compacts que les défauts Quasar. */
+.q-btn,
+.q-field__native,
+.q-field__label,
+.q-tab,
+.q-item {
+  font-size: 13px;
+}
+.q-icon {
+  font-size: 20px;
+}
+.q-toggle .q-icon,
+.q-chip .q-icon {
+  font-size: 16px;
+}
+
+.q-card,
+.q-table__container {
+  background: var(--demo-surface);
+}
+.q-card.q-card--bordered,
+.q-table__container.q-table--bordered {
+  border-color: var(--demo-border);
+}
+
+/* En-têtes de tableau sobres, ligne survolée lisible. */
+.q-table thead th {
+  font-weight: 600;
+  color: var(--demo-text-strong);
+  text-transform: none;
+}
+.q-table tbody tr:hover td {
+  background: rgba(98, 112, 120, 0.08);
+}
+
+/* Code et JSON : monospace, fond neutre, sans débordement. */
+.demo-pre,
+.text-mono {
+  font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.demo-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 340px;
+  overflow: auto;
+  background: var(--demo-code-bg);
+  color: var(--demo-text-strong);
+  border: 1px solid var(--demo-border);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+code {
+  padding: 1px 5px;
+  color: var(--demo-text-strong);
+  background: var(--demo-code-bg);
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* Sous-titre de page et sections. */
+.demo-page-subtitle {
+  margin: 2px 0 0;
+  color: var(--demo-text);
+}
+.demo-section-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--demo-text-strong);
+}
+
+.demo-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Bandeaux dérivés de la palette Sekur : info = ardoise, avertissement = jaune, sans teinte nouvelle. */
+.demo-note {
+  background: rgba(98, 112, 120, 0.12);
+  color: var(--demo-text-strong);
+}
+.demo-warn {
+  background: rgba(242, 192, 55, 0.22);
+  color: var(--demo-text-strong);
+}
+.demo-warn-text {
+  color: var(--demo-text-strong);
+  font-weight: 500;
+}
+
+/* Titres de cartes plus sobres (interface dense). */
+.text-h6 {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--demo-text-strong);
+}
+
+/* Écrans d'écriture grisés en lecture seule. */
+.demo-disabled {
+  opacity: 0.5;
+}
