@@ -33,7 +33,7 @@ const agentId = computed(() => lookups.value.collaborators.find((c) => c.isPlann
 const historyUrl = computed(() => (config.value ? `${config.value.appUrl}/#/params/agency` : null))
 
 const STRESS_WARNING =
-  'Le quota est partagé par toute l’agence : la rafale bloque vos intégrations réelles (ERP, synchronisations) pendant la durée indiquée par Retry-After.'
+  'Le quota de lecture est partagé par toute l’agence : la rafale bloque les lectures de vos intégrations réelles (ERP, synchronisations) pendant la durée indiquée par Retry-After.'
 const payloadAvailable = computed(() => config.value?.payloadTooLargeDocumented !== false)
 
 const pendingWarnings = computed(() => {
@@ -83,7 +83,7 @@ const scenarios = computed(() => [
   {
     key: '429',
     title: '429 - Limite de débit',
-    text: `Lit X-RateLimit-Remaining, puis envoie Remaining + 1 requêtes GET /me avec la clé lecture (${MAX_BURST} au plus), arrêtées au premier 429.`,
+    text: `Teste le quota de lecture (120 GET par minute) : lit X-RateLimit-Remaining, puis envoie Remaining + 1 requêtes GET /me avec la clé lecture (${MAX_BURST} au plus), arrêtées au premier 429. Le quota d'écriture (30 par minute) n'est pas testé : il exigerait de vraies écritures.`,
     requires: 'stress',
     confirm: `${STRESS_WARNING} Sekur journalise les refus de débit. Continuer ?`,
     run: () => rateLimit(api),

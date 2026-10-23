@@ -34,12 +34,26 @@ const REASONS_422 = {
   idempotency_key_reused: "Cette Idempotency-Key a déjà servi pour un autre corps d'écriture.",
 }
 
+// Trois plafonds par agence et toutes clés confondues ; le message du 429 dit lequel est atteint.
+function rateLimitCause(message) {
+  if (/quota de lecture/i.test(message ?? '')) {
+    return "Le quota de lecture de l'agence est atteint (120 lectures GET par minute). Les écritures restent possibles."
+  }
+  if (/quota d.écriture/i.test(message ?? '')) {
+    return "Le quota d'écriture de l'agence est atteint (30 écritures POST, PATCH ou DELETE par minute, y compris celles refusées en 403 ou 422). Les lectures restent possibles."
+  }
+  if (/simultan/i.test(message ?? '')) {
+    return "Le plafond de 4 requêtes simultanées de l'agence est atteint, lectures et écritures confondues."
+  }
+  return "Un plafond de l'agence est atteint : quota de lecture (120 GET par minute), quota d'écriture (30 POST, PATCH ou DELETE par minute) ou 4 requêtes simultanées."
+}
+
 /**
  * @returns {{ title: string, text: string } | null} null pour une réponse réussie.
  */
 export function explainError(response) {
   if (!response || response.status < 400) return null
-  const { status, reason, retryAfter } = formatError(response)
+  const { status, reason, retryAfter, message } = formatError(response)
   switch (status) {
     case 401:
       return {
@@ -75,7 +89,7 @@ export function explainError(response) {
     case 429:
       return {
         title: '429 - Limite de débit atteinte',
-        text: `Le quota de l'agence est atteint (120 requêtes par minute, 4 simultanées, toutes clés confondues). ${
+        text: `${rateLimitCause(message)} ${
           retryAfter != null
             ? `Réessayez après ${retryAfter} s, délai donné par l'en-tête Retry-After.`
             : "Réessayez après le délai de l'en-tête Retry-After."

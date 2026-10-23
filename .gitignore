@@ -17,3 +17,12 @@ yarn-error.log*
 
 # Éditeur
 .idea/
+.ai/.git-conventions.md
+.ai/thoughts/
+.ai/images/
+.ai/attachments/
+.ai/.setup-script.tmp
+.ai/.cleanup-script.tmp
+.ai/.archive-script.tmp
+.ai/.hook-*.tmp
+.mcp.json
