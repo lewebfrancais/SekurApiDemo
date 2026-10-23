@@ -69,8 +69,9 @@ export async function overlap(api, { siteId, agentId, now = new Date() }) {
 }
 
 /**
- * 429 déterministe, avec la clé lecture (le quota est partagé par toutes les clés de l'agence : la
- * rafale bloque aussi ses autres intégrations). Une première requête lit X-RateLimit-Remaining,
+ * 429 déterministe, avec la clé lecture (le quota de lecture est partagé par toutes les clés de
+ * l'agence : la rafale bloque aussi les lectures de ses autres intégrations ; le quota d'écriture, indépendant,
+ * n'est pas touché). Une première requête lit X-RateLimit-Remaining,
  * puis on envoie Remaining + 1 requêtes (plafond MAX_BURST) par paquets parallèles, en s'arrêtant
  * au premier 429. Sans 429 au plafond, la démo l'indique au lieu de boucler.
  */

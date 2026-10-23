@@ -65,6 +65,12 @@ describe('scénarios pédagogiques', () => {
     for (const call of api.get.mock.calls) expect(call[2]).toEqual({ keyLevel: 'read' })
   })
 
+  it('429 : ne teste que le quota de lecture, sans aucune écriture', async () => {
+    const api = { ...limitedApi(20), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }
+    await rateLimit(api)
+    for (const method of ['post', 'patch', 'delete']) expect(api[method]).not.toHaveBeenCalled()
+  })
+
   it('429 : plafonne à 150 requêtes et signale « limite non atteinte »', async () => {
     const api = limitedApi(1000)
     const out = await rateLimit(api)

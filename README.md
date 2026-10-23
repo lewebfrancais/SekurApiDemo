@@ -34,7 +34,7 @@ Renseignez `.env.local` (ignoré par git) :
 | `SEKUR_API_KEY_DELETE` | Clé de niveau lecture + écriture + suppression, pour les `DELETE`.                                                         |
 | `SEKUR_APP_URL`        | Application Sekur, pour le lien vers l'Historique (`https://platform.sekur.fr`).                                           |
 | `DEMO_ALLOW_WRITES`    | `true` pour autoriser les écritures. Désactivé par défaut.                                                                 |
-| `DEMO_ALLOW_STRESS`    | `true` pour autoriser les scénarios de rafale (429) et de corps trop gros (413).                                           |
+| `DEMO_ALLOW_STRESS`    | `true` pour autoriser les scénarios de rafale de lectures (429) et de corps trop gros (413).                               |
 
 L'URL de l'API doit être en `https` (`http` n'est accepté que pour `localhost` et `127.0.0.1`). Chaque clé est facultative : sans clé pour un niveau, ce niveau est indisponible.
 
@@ -51,7 +51,7 @@ Ouvrez <http://localhost:9000>. Redémarrez la commande après chaque modificati
 - **La clé n'atteint jamais le navigateur.** Le serveur de dev Vite fait proxy de `/external` vers l'API, ajoute l'en-tête `X-API-Key` lu dans `.env.local` et règle le CORS. Le front indique seulement un niveau de clé (lecture, écriture, suppression), que le proxy retire avant d'appeler l'API.
 - **Aucune trace de la clé.** Le proxy ne journalise aucun en-tête et retire des réponses tout en-tête qui pourrait la porter.
 - **Lecture seule par défaut.** Sans `DEMO_ALLOW_WRITES=true`, le proxy refuse (403) toute écriture faite avec une clé écriture ou suppression, même si l'interface est contournée. Une écriture faite avec la clé lecture est transmise pour montrer le 403 de l'API, après vérification (`GET /me`) que `SEKUR_API_KEY_READ` est bien une clé de niveau lecture. Les écrans d'écriture restent visibles, grisés, avec l'explication.
-- **Scénarios de charge désactivés par défaut.** Le quota de requêtes est partagé par toute l'agence : une rafale (429) bloque aussi vos intégrations réelles (ERP, synchronisations) pendant la durée indiquée par `Retry-After`. Ce verrou est celui de l'interface : le proxy ne limite pas lui-même le débit des lectures.
+- **Scénarios de charge désactivés par défaut.** Le quota de lecture (120 `GET` par minute) est partagé par toute l'agence : une rafale (429) bloque aussi les lectures de vos intégrations réelles (ERP, synchronisations) pendant la durée indiquée par `Retry-After`. Le quota d'écriture (30 `POST`, `PATCH` et `DELETE` par minute) est indépendant et n'est jamais testé par une rafale. Ce verrou est celui de l'interface : le proxy ne limite pas lui-même le débit.
 - **Application locale.** Le serveur de dev n'écoute que sur `localhost` ; le proxy n'existe qu'avec `npm run dev` et n'est pas authentifié. Ne changez pas l'hôte (`--hostname`) : la clé serait utilisable par tout le réseau.
 
 ## Avant d'activer les écritures
@@ -78,7 +78,7 @@ Le scénario fonctionne en lecture seule. Les étapes d'écriture sont optionnel
 - **Écriture** : créer un client et son site, créer une vacation, la décaler, puis gérer le planning.
 - **Catalogue** : créer, modifier et supprimer articles, spécialités, remises et réglages de tarification, à trois niveaux (agence, client, site).
 - **Erreurs** : 422 (règle métier, chevauchement) et acquittement d'un avertissement.
-- **Avec `DEMO_ALLOW_STRESS=true`** : 429 (rafale) et 413 (corps de plus de 4 Mio).
+- **Avec `DEMO_ALLOW_STRESS=true`** : 429 (rafale de lectures) et 413 (corps de plus de 4 Mio).
 
 ## Écrans
 
@@ -97,7 +97,7 @@ Les verbes HTTP suivent le même code couleur partout : vert pour `POST`, ardois
 
 - **Planning** : `GET /services` ne renvoie que les vacations publiées aux collaborateurs. Une vacation non publiée n'est lisible que par son identifiant, ou avec `updatedSince`, réduite à son identifiant. Le statut `unpublished` est un signal de retrait pour la synchronisation, pas un filtre.
 - **Réglages de tarification** : la lecture renvoie `overrunSpecialty` (`{id, name}`), l'écriture attend `overrunSpecialtyId`. La démo fait la conversion.
-- **Quota partagé** : les 120 requêtes par minute valent pour toutes les clés de l'agence.
+- **Deux quotas partagés** : 120 lectures (`GET`) et 30 écritures (`POST`, `PATCH`, `DELETE`) par minute valent pour toutes les clés de l'agence. Une écriture refusée (403, 422) compte dans le quota d'écriture. Les en-têtes `X-RateLimit-*` décrivent le quota de la requête, et le message du 429 dit lequel est atteint. S'y ajoutent 4 requêtes simultanées par agence.
 - **404** : un identifiant inexistant et celui d'une autre agence répondent de la même façon.
 - **Spécialités** : pas de `DELETE` (405) ; on les désactive par `PATCH` avec une clé de niveau suppression.
 - **Retrait d'étapes d'une tournée** : il déprogramme des vacations et exige une clé de niveau suppression.

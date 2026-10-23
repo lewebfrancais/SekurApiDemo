@@ -56,6 +56,29 @@ describe('explainError', () => {
     expect(out.text).toContain('17 s')
   })
 
+  it.each([
+    [
+      "Trop de requêtes de lecture : le quota de lecture de l'agence est atteint. Les écritures restent possibles.",
+      /quota de lecture.*120 lectures/,
+      /écritures restent possibles/,
+    ],
+    [
+      "Trop d'écritures : le quota d'écriture de l'agence (créations, modifications, suppressions) est atteint. Les lectures restent possibles.",
+      /quota d'écriture.*30 écritures/,
+      /lectures restent possibles/,
+    ],
+    ['Trop de requêtes simultanées pour cette agence.', /4 requêtes simultanées/, /simultanées/],
+  ])('nomme le plafond atteint pour un 429 : %s', (message, quota) => {
+    const { text } = explainError(res(429, { message }, { 'retry-after': '5' }))
+    expect(text).toMatch(quota)
+    expect(text).toContain('5 s')
+  })
+
+  it('reste générique pour un 429 sans message reconnu, sans chiffre unique', () => {
+    const { text } = explainError(res(429, {}))
+    expect(text).toMatch(/quota de lecture.*quota d'écriture.*simultanées/)
+  })
+
   it('détaille la règle pour un 422 business_rule et confirmation_required', () => {
     expect(explainError(res(422, { reason: 'business_rule' })).text).toMatch(/règle métier/)
     expect(explainError(res(422, { reason: 'confirmation_required' })).text).toContain(

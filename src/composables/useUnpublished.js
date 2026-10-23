@@ -1,5 +1,5 @@
 // Vacations non publiées : l'API ne les liste pas. Avec `updatedSince`, elles ressortent réduites à leur
-// identifiant, relues une à une (quota de 120 requêtes par minute, partagé par toute l'agence).
+// identifiant, relues une à une (quota de lecture de 120 requêtes par minute, partagé par toute l'agence).
 import { MAX_RANGE_DAYS_SYNC, toDateInput } from '../api/dates.js'
 import { filterRows } from '../api/planning.js'
 import { lookups, quietApi, serviceReadCache } from './useDemo.js'
