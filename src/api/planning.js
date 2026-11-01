@@ -1,3 +1,4 @@
+import { acknowledgedQuery } from './catalog.js'
 import { fromDatetimeInput, tomorrowWindow } from './dates.js'
 
 export function serviceFormValues(row) {
@@ -57,16 +58,48 @@ export function diffService(before, after) {
   return body
 }
 
-/**
- * Filtre local des vacations non publiées relues une à une : l'API les renvoie réduites à leur
- * identifiant, sans appliquer la plage ni les filtres site et collaborateur.
- */
-export function filterRows(rows, { from, to, site, agent }) {
-  return rows.filter((row) => {
-    const day = String(row.startAt ?? '').slice(0, 10)
-    if (!day || day < from || day >= to) return false
-    if (site && row.siteId !== site) return false
-    if (agent && row.agent?.id !== agent) return false
-    return true
-  })
+export const PUBLISHED_OPTIONS = [
+  { label: 'Toutes', value: null },
+  { label: 'Planifiées', value: 'true' },
+  { label: 'Brouillons', value: 'false' },
+]
+
+// Paramètres documentés de chaque liste : l'API refuse (400) tout autre paramètre.
+export const PLANNING_LISTS = {
+  services: {
+    label: 'Vacations',
+    path: '/services',
+    params: ['from', 'to', 'site', 'customer', 'agent', 'status', 'updatedSince', 'published'],
+  },
+  circuits: {
+    label: 'Tournées',
+    path: '/circuits',
+    params: ['from', 'to', 'site', 'agent', 'status', 'published'],
+  },
+  breaks: {
+    label: 'Pauses',
+    path: '/service-breaks',
+    params: ['from', 'to', 'site', 'agent', 'published'],
+  },
+}
+
+export function planningListQuery(list, filters) {
+  return Object.fromEntries(PLANNING_LISTS[list].params.map((key) => [key, filters[key]]))
+}
+
+export function patchPublished(api, id, published, codes = []) {
+  const body = codes.length ? { published, acknowledgedWarnings: codes } : { published }
+  return api.patch(`/services/${id}`, body)
+}
+
+// Un DELETE n'a pas de corps : l'acquittement passe en paramètre d'URL.
+export function deleteService(api, id, codes = []) {
+  const query = codes.length ? { acknowledgedWarnings: acknowledgedQuery(codes) } : undefined
+  return api.delete(`/services/${id}`, query)
+}
+
+export function deleteSuccessMessage(row) {
+  return row.status === 'unprogrammed'
+    ? "Vacation déjà déprogrammée : l'API répond 204 sans effet."
+    : 'Vacation supprimée (déprogrammée).'
 }

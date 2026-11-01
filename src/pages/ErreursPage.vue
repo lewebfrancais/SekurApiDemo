@@ -5,6 +5,7 @@ import ExchangePanel from '../components/ExchangePanel.vue'
 import {
   businessRule,
   forbidden,
+  invalidPublished,
   notFound,
   overlap,
   payloadTooLarge,
@@ -44,6 +45,12 @@ const pendingWarnings = computed(() => {
 })
 
 const scenarios = computed(() => [
+  {
+    key: '400',
+    title: '400 - Filtre invalide',
+    text: 'Liste des vacations avec published=oui : seules true et false sont acceptées.',
+    run: () => invalidPublished(api),
+  },
   {
     key: '401',
     title: '401 - Clé absente ou invalide',

@@ -2,18 +2,19 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import ExchangePanel from './ExchangePanel.vue'
+import { MAX_RANGE_DAYS, daysBetween, formatDateTime, weekRange } from '../api/dates.js'
 import {
-  MAX_RANGE_DAYS,
-  MAX_RANGE_DAYS_SYNC,
-  daysBetween,
-  formatDateTime,
-  weekRange,
-} from '../api/dates.js'
-import { diffService, filterRows, serviceBody, serviceFormValues } from '../api/planning.js'
+  PUBLISHED_OPTIONS,
+  deleteService,
+  deleteSuccessMessage,
+  diffService,
+  patchPublished,
+  serviceBody,
+  serviceFormValues,
+} from '../api/planning.js'
 import { realItemWarning } from '../api/risks.js'
 import { methodColor } from '../api/verbs.js'
 import { askConfirm } from '../composables/useConfirm.js'
-import { MAX_UNPUBLISHED, loadUnpublishedServices } from '../composables/useUnpublished.js'
 import {
   api,
   keyLevel,
@@ -21,8 +22,6 @@ import {
   personName,
   quietApi,
   rememberService,
-  serviceReadCache as readCache,
-  sessionServiceIds,
 } from '../composables/useDemo.js'
 
 const $q = useQuasar()
@@ -32,9 +31,7 @@ const to = ref(week.to)
 const siteFilter = ref(null)
 const agentFilter = ref(null)
 const statusFilter = ref('default')
-const includeUnpublished = ref(false)
-const truncated = ref(0)
-const unpublishedStats = reactive({ read: 0, kept: 0, rateLimited: false })
+const published = ref(null)
 const PAGE_LIMIT = 100
 const listedTotal = ref(0)
 const rows = ref([])
@@ -64,7 +61,7 @@ const columns = [
   column('site', 'Site', (r) => siteName(r.siteId)),
   column('agent', 'Collaborateur', (r) => personName(r.agent)),
   column('status', 'Statut', 'status'),
-  column('published', 'Publiée', (r) => (r.published ? 'oui' : 'non')),
+  column('published', 'Planifiée', (r) => (r.published ? 'oui' : 'non')),
   { name: 'actions', label: 'Actions', field: 'actions', align: 'right' },
 ]
 
@@ -91,20 +88,6 @@ const pendingCodes = computed(() => {
     : []
 })
 
-async function loadUnpublished() {
-  const result = await loadUnpublishedServices({
-    from: from.value,
-    to: to.value,
-    site: siteFilter.value,
-    agent: agentFilter.value,
-  })
-  truncated.value = result.truncated
-  unpublishedStats.rateLimited = result.rateLimited
-  unpublishedStats.read = result.read
-  unpublishedStats.kept = result.rows.length
-  return result.rows
-}
-
 let loadSeq = 0
 async function load() {
   const seq = ++loadSeq
@@ -120,40 +103,17 @@ async function load() {
     site: siteFilter.value,
     agent: agentFilter.value,
     status: statusFilter.value === 'default' ? undefined : statusFilter.value,
+    published: published.value,
     limit: PAGE_LIMIT,
   })
-  const listed = res.response?.ok ? res.response.body.data : []
-  listedTotal.value = res.response?.ok ? (res.response.body.meta?.total ?? listed.length) : 0
-  // Vacations non publiées : l'API ne les renvoie qu'avec updatedSince, réduites à leur identifiant.
-  const unpublished = includeUnpublished.value ? await loadUnpublished() : []
-  // Vacations créées pendant la session, même non publiées (donc absentes de la liste de l'API).
-  const known = new Set([...listed, ...unpublished].map((r) => r.id))
-  const extra = []
-  for (const id of sessionServiceIds.value) {
-    if (known.has(id)) continue
-    const one = readCache.get(id) ?? (await quietApi.get(`/services/${id}`)).response?.body
-    if (one?.startAt) {
-      readCache.set(id, one)
-      extra.push({ ...one, session: true })
-    }
-  }
   // Une réponse plus lente d'un filtre précédent ne doit pas écraser l'affichage courant.
   if (seq !== loadSeq) return
-  const filters = {
-    from: from.value,
-    to: to.value,
-    site: siteFilter.value,
-    agent: agentFilter.value,
-  }
-  rows.value = [...filterRows(extra, filters), ...unpublished, ...listed]
+  const listed = res.response?.ok ? res.response.body.data : []
+  listedTotal.value = res.response?.ok ? (res.response.body.meta?.total ?? listed.length) : 0
+  rows.value = listed
   exchange.value = res
   lastAction.value = null
   loading.value = false
-}
-
-function refresh() {
-  readCache.clear()
-  return load()
 }
 
 onMounted(async () => {
@@ -161,7 +121,7 @@ onMounted(async () => {
   if (res?.ok) activityTypes.value = res.body.data
   load()
 })
-watch([from, to, siteFilter, agentFilter, statusFilter, includeUnpublished], load)
+watch([from, to, siteFilter, agentFilter, statusFilter, published], load)
 
 watch(
   () => [dialog.values.siteId, needsSpecialty.value],
@@ -199,16 +159,12 @@ function openEdit(row) {
 
 const ask = (title, lines, extra) => askConfirm($q, title, lines, extra)
 
-// On mémorise une création (201) : non publiée, elle n'apparaît pas dans la liste de l'API.
-const rememberCreated = (done) =>
-  done.response.status === 201 && done.response.body?.id && rememberService(done.response.body.id)
-
 async function perform(action, success, codes = []) {
   const done = await action(codes)
   if (done.response?.ok) {
-    rememberCreated(done)
+    if (done.response.status === 201 && done.response.body?.id)
+      rememberService(done.response.body.id)
     $q.notify({ type: 'positive', message: success })
-    readCache.clear()
     await load()
   }
   exchange.value = done
@@ -247,15 +203,14 @@ async function submitDialog() {
 
 async function togglePublished(row) {
   const next = !row.published
-  const lines = [...realWarning(row), `${next ? 'Publier' : 'Dépublier'} la vacation ${row.id}.`]
+  const lines = [
+    ...realWarning(row),
+    `${next ? 'Planifier' : 'Déplanifier'} la vacation ${row.id}.`,
+  ]
   if (!(await ask('Confirmer', lines))) return
   await perform(
-    (codes) =>
-      api.patch(`/services/${row.id}`, {
-        published: next,
-        ...(codes.length ? { acknowledgedWarnings: codes } : {}),
-      }),
-    next ? 'Vacation publiée.' : 'Vacation dépubliée.',
+    (codes) => patchPublished(api, row.id, next, codes),
+    next ? 'Vacation planifiée.' : 'Vacation déplanifiée.',
   )
 }
 
@@ -295,14 +250,11 @@ async function remove(row) {
     },
   )
   if (!answer) return
-  const invoice = answer.value.includes('invoice_correction')
-  await perform((codes) => {
-    const all = [...(invoice ? ['invoice_correction'] : []), ...codes]
-    return api.delete(
-      `/services/${row.id}`,
-      all.length ? { acknowledgedWarnings: all.join(',') } : undefined,
-    )
-  }, 'Vacation supprimée (déprogrammée).')
+  const invoice = answer.value.includes('invoice_correction') ? ['invoice_correction'] : []
+  await perform(
+    (codes) => deleteService(api, row.id, [...invoice, ...codes]),
+    deleteSuccessMessage(row),
+  )
 }
 
 function confirmWarnings() {
@@ -317,9 +269,9 @@ function confirmWarnings() {
 <template>
   <div class="q-gutter-y-md">
     <q-banner dense class="demo-note">
-      Gérez le planning depuis l'interface. Seules les vacations <strong>publiées</strong> sont
-      listées par l'API ; celles créées pendant cette session apparaissent aussi (mention « session
-      »). Créneau par défaut : demain, 8 h-16 h.
+      Gérez le planning depuis l'interface. L'API liste les vacations planifiées et les brouillons
+      (non planifiées) : choisissez « Brouillons » pour les compléter puis les planifier. Créneau
+      par défaut : demain, 8 h-16 h.
     </q-banner>
     <q-banner v-if="keyLevel !== 'delete'" dense class="demo-warn">
       La suppression exige la clé « suppression » (à choisir dans l'en-tête), sinon l'API répond
@@ -359,34 +311,30 @@ function confirmWarnings() {
         outlined
         style="min-width: 160px"
       />
-      <q-toggle v-model="includeUnpublished" label="Afficher aussi les non publiées" />
+      <q-select
+        v-model="published"
+        :options="PUBLISHED_OPTIONS"
+        label="Publication"
+        dense
+        outlined
+        emit-value
+        map-options
+        style="min-width: 160px"
+      />
       <q-btn color="positive" icon="add" label="Créer une vacation" @click="openCreate"
         ><q-tooltip
           >Ouvre le formulaire de création d'une vacation (POST /services).</q-tooltip
         ></q-btn
       >
-      <q-btn flat icon="refresh" label="Actualiser" @click="refresh"
+      <q-btn flat icon="refresh" label="Actualiser" @click="load"
         ><q-tooltip>Relit la liste depuis l'API (GET).</q-tooltip></q-btn
       >
     </div>
 
     <q-banner v-if="rangeError" dense class="demo-warn">{{ rangeError }}</q-banner>
     <q-banner v-if="listedTotal > PAGE_LIMIT" dense class="demo-warn">
-      Le tableau charge les {{ PAGE_LIMIT }} premières vacations publiées de la période, sur
+      Le tableau charge les {{ PAGE_LIMIT }} premières vacations de la période, sur
       {{ listedTotal }} : réduisez la période.
-    </q-banner>
-    <q-banner v-if="includeUnpublished" dense class="demo-note">
-      Non publiées : <strong>{{ unpublishedStats.read }}</strong> relues,
-      <strong>{{ unpublishedStats.kept }}</strong> correspondent à la période et aux filtres (site,
-      collaborateur, appliqués après la lecture : l'API les ignore pour ces vacations). Elles sont
-      retrouvées avec <code>updatedSince</code> ({{ MAX_RANGE_DAYS_SYNC }} jours) puis relues une à
-      une ; seules les {{ MAX_UNPUBLISHED }} plus récentes le sont<span v-if="truncated">
-        ({{ truncated }} non lue(s))</span
-      >.
-    </q-banner>
-    <q-banner v-if="includeUnpublished && unpublishedStats.rateLimited" dense class="demo-warn">
-      Limite de débit atteinte (429) pendant la lecture : résultats partiels. Attendez
-      <code>Retry-After</code> (environ 1 minute) puis actualisez.
     </q-banner>
     <q-table
       dense
@@ -398,14 +346,8 @@ function confirmWarnings() {
       :loading="loading"
       :rows-per-page-options="[10, 25, 50, 100]"
       rows-per-page-label="Lignes par page"
-      no-data-label="Aucune vacation publiée sur cette période"
+      no-data-label="Aucune vacation sur cette période"
     >
-      <template #body-cell-title="cell">
-        <q-td>
-          {{ cell.row.title }}
-          <q-badge v-if="cell.row.session" color="grey-6" label="session" class="q-ml-xs" />
-        </q-td>
-      </template>
       <template #body-cell-actions="cell">
         <q-td class="text-right">
           <q-btn flat dense icon="edit" aria-label="Modifier" @click="openEdit(cell.row)"
@@ -416,13 +358,13 @@ function confirmWarnings() {
             flat
             dense
             :icon="cell.row.published ? 'visibility_off' : 'visibility'"
-            :aria-label="cell.row.published ? 'Dépublier' : 'Publier'"
+            :aria-label="cell.row.published ? 'Déplanifier' : 'Planifier'"
             @click="togglePublished(cell.row)"
           >
             <q-tooltip>{{
               cell.row.published
-                ? 'Dépublier : retire la vacation du planning des collaborateurs (PATCH published).'
-                : 'Publier : affiche la vacation aux collaborateurs (PATCH published).'
+                ? 'Déplanifier : retire la vacation du planning des collaborateurs (PATCH published: false).'
+                : 'Planifier : affiche la vacation aux collaborateurs (PATCH published: true).'
             }}</q-tooltip>
           </q-btn>
           <q-btn
@@ -531,7 +473,7 @@ function confirmWarnings() {
             outlined
           />
           <q-input v-model="dialog.values.title" label="Intitulé" dense outlined />
-          <q-toggle v-model="dialog.values.published" label="Publier la vacation" />
+          <q-toggle v-model="dialog.values.published" label="Planifier la vacation (published)" />
           <div v-if="dialog.error" class="text-negative">{{ dialog.error }}</div>
         </q-card-section>
         <q-card-actions align="right">

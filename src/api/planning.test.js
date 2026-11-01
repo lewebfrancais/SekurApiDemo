@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest'
-import { diffService, filterRows, serviceBody, serviceFormValues } from './planning.js'
+import { describe, expect, it, vi } from 'vitest'
+import { createClient } from './client.js'
+import {
+  PUBLISHED_OPTIONS,
+  deleteService,
+  deleteSuccessMessage,
+  diffService,
+  patchPublished,
+  planningListQuery,
+  serviceBody,
+  serviceFormValues,
+} from './planning.js'
 
 const row = {
   id: 9,
@@ -12,6 +22,13 @@ const row = {
   agent: { id: 117, firstName: 'SEKUR', lastName: 'DÉMO' },
   specialty: null,
 }
+
+function fakeFetch() {
+  return vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+}
+
+const makeClient = (fetchImpl, level = 'read') =>
+  createClient({ getKeyLevel: () => level, fetchImpl, uuid: () => 'uuid' })
 
 describe('planning', () => {
   it("lit une vacation en valeurs de formulaire (heure locale de l'agence)", () => {
@@ -52,18 +69,6 @@ describe('planning', () => {
     expect(diffService(before, { ...before, agentId: null })).toEqual({ agentId: null })
   })
 
-  it('filtre localement les non publiées par plage, site et collaborateur', () => {
-    const rows = [
-      row,
-      { ...row, id: 10, startAt: '2030-02-05T08:00:00+01:00' },
-      { ...row, id: 11, siteId: 7 },
-      { ...row, id: 12, agent: null },
-    ]
-    const range = { from: '2030-01-30', to: '2030-02-01' }
-    expect(filterRows(rows, range).map((r) => r.id)).toEqual([9, 11, 12])
-    expect(filterRows(rows, { ...range, site: 35 }).map((r) => r.id)).toEqual([9, 12])
-    expect(filterRows(rows, { ...range, agent: 117 }).map((r) => r.id)).toEqual([9, 11])
-  })
   it('garde collaborateur, spécialité et intitulé renseignés ; vide l’intitulé en PATCH', () => {
     const before = serviceFormValues(row)
     expect(serviceBody({ ...before, specialtyId: 3 })).toMatchObject({
@@ -74,12 +79,90 @@ describe('planning', () => {
     expect(diffService(before, { ...before, title: '' })).toEqual({ title: '' })
   })
 
-  it('exclut la borne de fin et les vacations sans date', () => {
-    const rows = [
-      { ...row, startAt: '2030-02-01T00:00:00+01:00' },
-      { ...row, startAt: null },
-    ]
-    expect(filterRows(rows, { from: '2030-01-30', to: '2030-02-01' })).toEqual([])
-    expect(filterRows([row], { from: '2030-01-31', to: '2030-02-01', site: 35 })).toHaveLength(1)
+  it('filtre published : trois états', async () => {
+    const urls = []
+    for (const { value } of PUBLISHED_OPTIONS) {
+      const fetchImpl = fakeFetch()
+      const query = planningListQuery('services', {
+        from: '2030-01-07',
+        to: '2030-01-14',
+        published: value,
+      })
+      await makeClient(fetchImpl).get('/services', query)
+      urls.push(fetchImpl.mock.calls[0][0])
+    }
+    expect(urls).toEqual([
+      '/external/v1/services?from=2030-01-07&to=2030-01-14',
+      '/external/v1/services?from=2030-01-07&to=2030-01-14&published=true',
+      '/external/v1/services?from=2030-01-07&to=2030-01-14&published=false',
+    ])
+  })
+
+  it("planningListQuery n'envoie que les paramètres documentés", () => {
+    const filters = {
+      status: 'pending',
+      customer: 4,
+      updatedSince: '2030-01-01T00:00:00Z',
+      site: 35,
+      agent: 117,
+      published: 'false',
+      from: '2030-01-07',
+      to: '2030-01-14',
+    }
+    expect(Object.keys(planningListQuery('breaks', filters)).sort()).toEqual([
+      'agent',
+      'from',
+      'published',
+      'site',
+      'to',
+    ])
+    expect(Object.keys(planningListQuery('circuits', filters)).sort()).toEqual([
+      'agent',
+      'from',
+      'published',
+      'site',
+      'status',
+      'to',
+    ])
+  })
+
+  it('planifier un brouillon', async () => {
+    const fetchImpl = fakeFetch()
+    await patchPublished(makeClient(fetchImpl, 'write'), 9, true)
+    const [url, init] = fetchImpl.mock.calls[0]
+    expect(url).toBe('/external/v1/services/9')
+    expect(init.method).toBe('PATCH')
+    expect(init.body).toBe('{"published":true}')
+
+    const withCodes = fakeFetch()
+    await patchPublished(makeClient(withCodes, 'write'), 9, true, ['planning_overlap'])
+    expect(JSON.parse(withCodes.mock.calls[0][1].body)).toEqual({
+      published: true,
+      acknowledgedWarnings: ['planning_overlap'],
+    })
+  })
+
+  it("DELETE : acquittement dans l'URL", async () => {
+    const fetchImpl = fakeFetch()
+    await deleteService(makeClient(fetchImpl, 'delete'), 9, ['invoice_correction', 'x'])
+    const [url, init] = fetchImpl.mock.calls[0]
+    expect(url).toBe('/external/v1/services/9?acknowledgedWarnings=invoice_correction%2Cx')
+    expect(init.method).toBe('DELETE')
+    expect(init.body).toBeUndefined()
+    expect(Object.keys(init.headers)).not.toContain('Content-Type')
+
+    const bare = fakeFetch()
+    await deleteService(makeClient(bare, 'delete'), 9)
+    expect(bare.mock.calls[0][0]).toBe('/external/v1/services/9')
+  })
+
+  it('DELETE rejoué : 204 sans effet sur une vacation déjà déprogrammée', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }))
+    const exchange = await deleteService(makeClient(fetchImpl, 'delete'), 9)
+    expect(exchange.response.ok).toBe(true)
+    expect(deleteSuccessMessage({ id: 9, status: 'unprogrammed' })).toContain('204 sans effet')
+    expect(deleteSuccessMessage({ id: 9, status: 'pending' })).toBe(
+      'Vacation supprimée (déprogrammée).',
+    )
   })
 })

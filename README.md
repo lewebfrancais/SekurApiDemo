@@ -68,34 +68,35 @@ Les écritures portent sur les **données réelles de votre agence**. Utilisez d
 Le scénario fonctionne en lecture seule. Les étapes d'écriture sont optionnelles.
 
 1. **Accueil (30 s).** `GET /me` : l'agence et le niveau de la clé. Le sélecteur de clé, en haut à droite, reste accessible partout.
-2. **Lecture (1 min 30).** Clients, sites, collaborateurs, puis le planning : période (31 jours au plus), filtres et pagination. Dépliez « Voir la requête et la réponse brute » pour montrer l'appel réel, sans clé.
-3. **Erreurs (1 min 30).** Jouez 401 (sans clé), 403 (écriture avec la clé lecture) et 404 (élément inexistant ou d'une autre agence). Chaque refus s'affiche avec la requête, la réponse brute et une explication.
+2. **Lecture (1 min 30).** Clients, sites, collaborateurs, puis le planning (vacations, tournées et pauses) : période (31 jours au plus), filtres, dont la publication (toutes, planifiées ou brouillons), et pagination. Dépliez « Voir la requête et la réponse brute » pour montrer l'appel réel, sans clé.
+3. **Erreurs (1 min 30).** Jouez 400 (filtre invalide), 401 (sans clé), 403 (écriture avec la clé lecture) et 404 (élément inexistant ou d'une autre agence). Chaque refus s'affiche avec la requête, la réponse brute et une explication.
 4. **Explorateur (1 min).** Parcourez toutes les opérations de l'API, générées depuis la spécification : c'est « tout le reste de l'API ». Lancez une lecture sans écran dédié.
 5. **Historique (30 s).** Le lien de l'écran Erreurs ouvre l'Historique des actions de Sekur, où les actions faites par l'API portent l'origine « API ».
 
 Étapes optionnelles, avec `DEMO_ALLOW_WRITES=true` :
 
-- **Écriture** : créer un client et son site, créer une vacation, la décaler, puis gérer le planning.
+- **Écriture** : créer un client et son site, créer une vacation, la décaler, puis gérer le planning : lister les brouillons, les compléter puis les planifier.
 - **Catalogue** : créer, modifier et supprimer articles, spécialités, remises et réglages de tarification, à trois niveaux (agence, client, site).
 - **Erreurs** : 422 (règle métier, chevauchement) et acquittement d'un avertissement.
 - **Avec `DEMO_ALLOW_STRESS=true`** : 429 (rafale de lectures) et 413 (corps de plus de 4 Mio).
 
 ## Écrans
 
-| Écran                | Contenu                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| Accueil              | Agence, niveau de la clé, `GET /me`.                                                          |
-| Lecture              | Clients, sites, collaborateurs et planning, avec filtres et pagination.                       |
-| Écriture             | Création de client, site et vacation, décalage, gestion du planning.                          |
-| Catalogue            | CRUD du catalogue aux niveaux agence, client et site.                                         |
-| Erreurs pédagogiques | Rejouer 401, 403, 404, 422, 429 et 413, avec la requête, la réponse brute et une explication. |
-| Explorateur          | Toutes les opérations de l'API, générées depuis la spécification OpenAPI.                     |
+| Écran                | Contenu                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| Accueil              | Agence, niveau de la clé, `GET /me`.                                                                  |
+| Lecture              | Clients, sites, collaborateurs et planning (vacations, tournées, pauses), avec filtres et pagination. |
+| Écriture             | Création de client, site et vacation, décalage, gestion du planning.                                  |
+| Catalogue            | CRUD du catalogue aux niveaux agence, client et site.                                                 |
+| Erreurs pédagogiques | Rejouer 400, 401, 403, 404, 422, 429 et 413, avec la requête, la réponse brute et une explication.    |
+| Explorateur          | Toutes les opérations de l'API, générées depuis la spécification OpenAPI.                             |
 
 Les verbes HTTP suivent le même code couleur partout : vert pour `POST`, ardoise pour `PATCH` et `PUT`, rouge pour `DELETE`, gris pour `GET`.
 
 ## Particularités de l'API
 
-- **Planning** : `GET /services` ne renvoie que les vacations publiées aux collaborateurs. Une vacation non publiée n'est lisible que par son identifiant, ou avec `updatedSince`, réduite à son identifiant. Le statut `unpublished` est un signal de retrait pour la synchronisation, pas un filtre.
+- **Planning** : `GET /services`, `/circuits` et `/service-breaks` renvoient les vacations planifiées et les brouillons (non planifiées), en entier ; vacations et tournées portent `published`. Le filtre `published` a trois états : absent (tout), `true` (planifiées) ou `false` (brouillons) ; toute autre valeur répond 400. Le statut `unpublished`, signal de retrait réduit à l'identifiant, n'existe qu'avec `updatedSince` et `published=true`. Un `DELETE` rejoué sur une vacation déjà déprogrammée répond 204 sans effet ; l'acquittement d'un `DELETE` (`acknowledgedWarnings`) passe en paramètre d'URL, séparé par des virgules.
+- **Messages d'erreur** : les messages de l'API sont du texte brut ; la démo les affiche comme du texte, sans jamais interpréter de HTML.
 - **Réglages de tarification** : la lecture renvoie `overrunSpecialty` (`{id, name}`), l'écriture attend `overrunSpecialtyId`. La démo fait la conversion.
 - **Deux quotas partagés** : 120 lectures (`GET`) et 30 écritures (`POST`, `PATCH`, `DELETE`) par minute valent pour toutes les clés de l'agence. Une écriture refusée (403, 422) compte dans le quota d'écriture. Les en-têtes `X-RateLimit-*` décrivent le quota de la requête, et le message du 429 dit lequel est atteint. S'y ajoutent 4 requêtes simultanées par agence.
 - **404** : un identifiant inexistant et celui d'une autre agence répondent de la même façon.
