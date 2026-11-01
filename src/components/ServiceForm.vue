@@ -156,9 +156,10 @@ async function submit(acknowledged = []) {
       />
       <q-input v-model="form.title" label="Intitulé" dense outlined class="col-12 col-md-8" />
       <div class="col-12 col-md-4">
-        <q-toggle v-model="form.published" label="Publier la vacation" />
+        <q-toggle v-model="form.published" label="Planifier la vacation (published)" />
         <div class="text-caption">
-          Non publiée, la vacation n'est pas renvoyée par <code>GET /services</code>.
+          Non planifiée, la vacation reste un brouillon : listée avec published=false, à planifier
+          ensuite par PATCH.
         </div>
       </div>
     </q-card-section>

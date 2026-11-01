@@ -85,6 +85,12 @@ describe('explainError', () => {
       'acknowledgedWarnings',
     )
   })
+  it('explique le 400 published et le acknowledgedWarnings en paramètre d’URL du DELETE', () => {
+    expect(explainError(res(400, {})).text).toContain('published')
+    const text = explainError(res(422, { reason: 'confirmation_required' })).text
+    expect(text).toContain('DELETE')
+    expect(text).toContain("paramètre d'URL")
+  })
   it.each([400, 405, 415, 503, 502])(
     'explique aussi le %i, ou donne un titre générique',
     (status) => {

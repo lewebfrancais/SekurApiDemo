@@ -78,17 +78,9 @@ export async function loadLookups() {
   }
 }
 
-// Vacations relues une à une par le Planning (non publiées, créées en session) : partagé entre
-// navigations pour ne pas refaire jusqu'à 40 requêtes sur le quota de l'agence.
-export const serviceReadCache = new Map()
-
 export const lastServiceId = ref(null)
-// Vacations créées pendant la session : une vacation non publiée n'est pas listée par l'API.
-export const sessionServiceIds = ref([])
 export function rememberService(id) {
   lastServiceId.value = id
-  if (!sessionServiceIds.value.includes(id))
-    sessionServiceIds.value = [id, ...sessionServiceIds.value]
 }
 export const createdIds = reactive({})
 

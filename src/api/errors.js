@@ -28,7 +28,7 @@ const REASONS_422 = {
   planning_conflict:
     "Le réglage de l'agence interdit ce conflit de planning (par exemple deux vacations qui se chevauchent). Il ne s'acquitte pas.",
   confirmation_required:
-    "Le planning signale des avertissements à confirmer. Recopiez leurs codes dans `acknowledgedWarnings` pour forcer l'écriture.",
+    "Le planning signale des avertissements à confirmer. Recopiez leurs codes dans `acknowledgedWarnings` pour forcer l'écriture : dans le corps, ou en paramètre d'URL pour un DELETE.",
   unsupported_service_type:
     'Ce type de service ne passe pas par cette route (tournée, archivée...).',
   idempotency_key_reused: "Cette Idempotency-Key a déjà servi pour un autre corps d'écriture.",
@@ -98,7 +98,7 @@ export function explainError(response) {
     case 400:
       return {
         title: '400 - Requête invalide',
-        text: "Paramètre inconnu, pagination ou plage de dates invalide, ou JSON illisible. L'API refuse un paramètre non documenté au lieu de l'ignorer.",
+        text: "Paramètre inconnu, valeur de filtre invalide (published n'accepte que true ou false), pagination ou plage de dates invalide, ou JSON illisible. L'API refuse un paramètre non documenté au lieu de l'ignorer.",
       }
     case 405:
       return {

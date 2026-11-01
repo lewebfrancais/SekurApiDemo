@@ -5,6 +5,7 @@ import {
   OVERSIZED_BODY_CHARS,
   businessRule,
   forbidden,
+  invalidPublished,
   notFound,
   overlap,
   payloadTooLarge,
@@ -24,6 +25,17 @@ describe('scénarios pédagogiques', () => {
   const meWith = (accessLevel) => ({
     response: { status: 200, body: { apiKey: { accessLevel } } },
     request: {},
+  })
+
+  it('400 : filtre published invalide', async () => {
+    const api = { get: vi.fn(async () => ex(400)) }
+    const out = await invalidPublished(api, { now: new Date(2030, 0, 9) })
+    expect(api.get).toHaveBeenCalledWith(
+      '/services',
+      { from: '2030-01-07', to: '2030-01-14', published: 'oui' },
+      { keyLevel: 'read' },
+    )
+    expect(out.exchange.response.status).toBe(400)
   })
 
   it('403 : écriture avec la clé lecture, après avoir vérifié qu’elle est bien en lecture seule', async () => {

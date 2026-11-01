@@ -1,5 +1,5 @@
 // Scénarios d'erreur : chacun rejoue un appel réel et renvoie l'échange (requête et réponse brute).
-import { tomorrowWindow } from './dates.js'
+import { tomorrowWindow, weekRange } from './dates.js'
 
 export const MAX_BURST = 150
 export const BURST_CONCURRENCY = 4
@@ -31,6 +31,12 @@ export async function forbidden(api) {
 
 export async function notFound(api) {
   return { exchange: await api.get(`/services/${UNKNOWN_ID}`, undefined, { keyLevel: 'read' }) }
+}
+
+// 400 : `published` n'accepte que true ou false.
+export async function invalidPublished(api, { now = new Date() } = {}) {
+  const query = { ...weekRange(now), published: 'oui' }
+  return { exchange: await api.get('/services', query, { keyLevel: 'read' }) }
 }
 
 export async function businessRule(api, { siteId }) {
